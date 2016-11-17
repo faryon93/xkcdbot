@@ -18,6 +18,11 @@ xkcdbot is configured through environment variables. Please set following variab
 
 - **TELEGRAM_TOKEN**
 
+Example launch command:
+```
+$: TELEGRAM_TOKEN=XXXXXXXXXXXX ./bin/xkcdbot
+```
+
 
 ## TODO
 

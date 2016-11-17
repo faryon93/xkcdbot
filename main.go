@@ -37,7 +37,7 @@ func main() {
     log.Println("xkcdbot", VERSION, "#" + GIT_COMMIT, "started")
 
     // authenticate with the telegram bot api
-    bot, err := tgbotapi.NewBotAPI("284534381:AAGvBYIwvYqfvUPqw-1XlGiYDbHcXMfok20")
+    bot, err := tgbotapi.NewBotAPI(telegramToken)
     if err != nil {
         log.Panic(err)
     }
