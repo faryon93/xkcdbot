@@ -1,0 +1,11 @@
+{
+	"project": {
+		"name": "xkcdbot",
+		"description": "xkcd telegram bot",
+		"package": "github.com/faryon93/xkcdbot"
+	},
+	"go": {
+		"min-version": "1.7.1"
+	},
+	"assets": []
+}
