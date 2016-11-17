@@ -50,15 +50,33 @@ func main() {
 
     // process all updates received by the bot
     for update := range updates {
-        if update.Message == nil {
-            continue
-        }
+        // we received a private message
+        if update.Message != nil {
+            // log the request
+            log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
 
-        // log the request
-        log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
+            // reply to the bot
+            msg := tgbotapi.NewMessage(update.Message.Chat.ID,"Hello " + update.Message.From.UserName + "! How are you?")
+            bot.Send(msg)
 
-        // reply to the bot
-        msg := tgbotapi.NewMessage(update.Message.Chat.ID,"Hello " + update.Message.From.UserName + "! How are you?")
-        bot.Send(msg)
+        // we received a inline query
+        } else if update.InlineQuery != nil {
+            log.Printf("[%s] inline query: %s", update.InlineQuery.From.UserName, update.InlineQuery.Query)
+
+            // build the answer to the inline query
+            article := tgbotapi.NewInlineQueryResultArticleMarkdown(update.InlineQuery.ID, "Test", "Ich bin die Antwort!")
+            article.Description = "Wer bin ich?"
+            answer := tgbotapi.InlineConfig{
+                InlineQueryID: update.InlineQuery.ID,
+                Results: []interface{}{article},
+                CacheTime: 0,
+            }
+
+            // send the answer
+            _, err := bot.AnswerInlineQuery(answer)
+            if err != nil {
+                log.Println("failed to answer inline query:", err.Error())
+            }
+        }       
     }
 }
