@@ -141,22 +141,6 @@ func main() {
 				if err != nil {
 					log.Println("failed to answer inline query:", err.Error())
 				}
-
-			}
-
-			// build the answer to the inline query
-			article := tgbotapi.NewInlineQueryResultArticleMarkdown(update.InlineQuery.ID, "Test", "Ich bin die Antwort!")
-			article.Description = "Wer bin ich?"
-			answer := tgbotapi.InlineConfig{
-				InlineQueryID: update.InlineQuery.ID,
-				Results:       []interface{}{article},
-				CacheTime:     0,
-			}
-
-			// send the answer
-			_, err := bot.AnswerInlineQuery(answer)
-			if err != nil {
-				log.Println("failed to answer inline query:", err.Error())
 			}
 		}
 	}
