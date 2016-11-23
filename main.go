@@ -55,6 +55,7 @@ func RandomizeMe(current int) int {
 	return rand.Intn(current-1) + 1
 }
 
+// TODO: merge getCurrent and getXkcd into one func
 // ----------------------------------------------------------------------------------
 func getCurrent() (current int) {
 
@@ -74,7 +75,7 @@ func getCurrent() (current int) {
 }
 
 // ----------------------------------------------------------------------------------
-func getXkcd(num int) (picurl string) {
+func getXkcd(num int) (picurl string, alt string) {
 
 	url := fmt.Sprint("http://xkcd.com/", num, "/info.0.json")
 
@@ -90,7 +91,9 @@ func getXkcd(num int) (picurl string) {
 	}
 	var obj XkcdStruct
 	json.Unmarshal(body, &obj)
-	return (obj.Img)
+	picurl = obj.Img
+	alt = obj.Alt
+	return
 }
 
 // ----------------------------------------------------------------------------------
@@ -128,14 +131,33 @@ func main() {
 		} else if update.InlineQuery != nil {
 			log.Printf("[%s] inline query: %s", update.InlineQuery.From.UserName, update.InlineQuery.Query)
 			if update.InlineQuery.Query == "random" {
+				var results []interface{}
 				Num := RandomizeMe(getCurrent())
-				pic := tgbotapi.NewInlineQueryResultPhoto(update.InlineQuery.ID, getXkcd(Num))
-				pic.ThumbURL = getXkcd(Num)
+				pUrl, pAlt := getXkcd(Num)
+				pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID, pUrl, pUrl)
+				pic.Caption = pAlt
+				results = append(results, pic)
 
 				answer := tgbotapi.InlineConfig{
 					InlineQueryID: update.InlineQuery.ID,
-					Results:       []interface{}{pic},
+					Results:       results,
 					CacheTime:     0,
+				}
+				_, err := bot.AnswerInlineQuery(answer)
+				if err != nil {
+					log.Println("failed to answer inline query:", err.Error())
+				}
+			} else {
+				// Get latest xkcd
+				Num := getCurrent()
+				pUrl, pAlt := getXkcd(Num)
+				pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID, pUrl, pUrl)
+				pic.Caption = pAlt
+
+				answer := tgbotapi.InlineConfig{
+					InlineQueryID: pic.ID,
+					Results:       []interface{}{pic},
+					CacheTime:     3,
 				}
 				_, err := bot.AnswerInlineQuery(answer)
 				if err != nil {
