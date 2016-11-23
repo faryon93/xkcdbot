@@ -8,7 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"time"
+	"strconv"
 
 	"gopkg.in/telegram-bot-api.v4"
 )
@@ -22,10 +22,15 @@ const (
 	GIT_COMMIT = "e76c8c01a"
 
 	TELEGRAM_UPDATE_TIMEOUT = 60
+
+	XKCD_CURRENT_URL = "http://xkcd.com/info.0.json"
+
+	RANDOM_INLINE_NUM = 3
 )
 
+
 // ----------------------------------------------------------------------------------
-//  global variables
+//  types
 // ----------------------------------------------------------------------------------
 
 type XkcdStruct struct {
@@ -42,24 +47,29 @@ type XkcdStruct struct {
 	Year       string `json:"year"`
 }
 
-var (
-	telegramToken  = os.Getenv("TELEGRAM_TOKEN")
-	xkcdCurrentUrl = "http://xkcd.com/info.0.json"
-)
 
 // ----------------------------------------------------------------------------------
-//  Functions
+//  global variables
 // ----------------------------------------------------------------------------------
-func RandomizeMe(current int) int {
-	rand.Seed(time.Now().Unix())
-	return rand.Intn(current-1) + 1
+
+var (
+	telegramToken  = os.Getenv("TELEGRAM_TOKEN")
+)
+
+
+// ----------------------------------------------------------------------------------
+//  functions
+// ----------------------------------------------------------------------------------
+
+func RandomizeMe(max int) int {
+	return rand.Intn(max - 1) + 1
 }
 
 // TODO: merge getCurrent and getXkcd into one func
 // ----------------------------------------------------------------------------------
 func getCurrent() (current int) {
 
-	response, err := http.Get(xkcdCurrentUrl)
+	response, err := http.Get(XKCD_CURRENT_URL)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -95,6 +105,7 @@ func getXkcd(num int) (picurl string, alt string) {
 	alt = obj.Alt
 	return
 }
+
 
 // ----------------------------------------------------------------------------------
 //  application entry
@@ -132,12 +143,17 @@ func main() {
 			log.Printf("[%s] inline query: %s", update.InlineQuery.From.UserName, update.InlineQuery.Query)
 			if update.InlineQuery.Query == "random" {
 				var results []interface{}
-				Num := RandomizeMe(getCurrent())
-				pUrl, pAlt := getXkcd(Num)
-				pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID, pUrl, pUrl)
-				pic.Caption = pAlt
-				results = append(results, pic)
 
+				// add the configured amount of results to the answer
+				for i := 0; i < RANDOM_INLINE_NUM; i++ {
+					Num := RandomizeMe(getCurrent())
+					pUrl, pAlt := getXkcd(Num)
+					pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID + strconv.Itoa(i), pUrl, pUrl)
+					pic.Caption = pAlt
+					results = append(results, pic)	
+				}
+				
+				// build the answer
 				answer := tgbotapi.InlineConfig{
 					InlineQueryID: update.InlineQuery.ID,
 					Results:       results,
