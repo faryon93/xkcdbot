@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"gopkg.in/telegram-bot-api.v4"
 )
@@ -114,6 +115,9 @@ func getXkcd(num int) (picurl string, alt string) {
 func main() {
 	// print the version number
 	log.Println("xkcdbot", VERSION, "#"+GIT_COMMIT, "started")
+
+	// setup seed for random
+	rand.Seed(time.Now().Unix())
 
 	// authenticate with the telegram bot api
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
