@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"flag"
+	"time"
 
 	"github.com/faryon93/xkcdbot/xkcd"
 
@@ -49,6 +50,9 @@ func main() {
 
 	// print the version number
 	log.Println("xkcdbot", VERSION, "#" + GIT_COMMIT, "started")
+
+	// setup seed for random
+	rand.Seed(time.Now().Unix())
 
 	// authenticate with the telegram bot api
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
