@@ -1,14 +1,12 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
 	"math/rand"
-	"net/http"
 	"os"
 	"strconv"
+
+	"github.com/faryon93/xkcdbot/xkcd"
 
 	"gopkg.in/telegram-bot-api.v4"
 )
@@ -18,34 +16,12 @@ import (
 // ----------------------------------------------------------------------------------
 
 const (
-	VERSION    = "0.1.0"
+	VERSION    = "0.1.1"
 	GIT_COMMIT = "e76c8c01a"
 
 	TELEGRAM_UPDATE_TIMEOUT = 60
-
-	XKCD_CURRENT_URL = "http://xkcd.com/info.0.json"
-
 	RANDOM_INLINE_NUM = 3
 )
-
-
-// ----------------------------------------------------------------------------------
-//  types
-// ----------------------------------------------------------------------------------
-
-type XkcdStruct struct {
-	Alt        string `json:"alt"`
-	Day        string `json:"day"`
-	Img        string `json:"img"`
-	Link       string `json:"link"`
-	Month      string `json:"month"`
-	News       string `json:"news"`
-	Num        int    `json:"num"`
-	SafeTitle  string `json:"safe_title"`
-	Title      string `json:"title"`
-	Transcript string `json:"transcript"`
-	Year       string `json:"year"`
-}
 
 
 // ----------------------------------------------------------------------------------
@@ -58,62 +34,12 @@ var (
 
 
 // ----------------------------------------------------------------------------------
-//  functions
-// ----------------------------------------------------------------------------------
-
-func RandomizeMe(max int) int {
-	return rand.Intn(max - 1) + 1
-}
-
-// TODO: merge getCurrent and getXkcd into one func
-// ----------------------------------------------------------------------------------
-func getCurrent() (current int) {
-
-	response, err := http.Get(XKCD_CURRENT_URL)
-	if err != nil {
-		log.Panic(err)
-	}
-	defer response.Body.Close()
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Panic(err)
-	}
-	var obj XkcdStruct
-	json.Unmarshal(body, &obj)
-	return (obj.Num)
-}
-
-// ----------------------------------------------------------------------------------
-func getXkcd(num int) (picurl string, alt string) {
-
-	url := fmt.Sprint("http://xkcd.com/", num, "/info.0.json")
-
-	response, err := http.Get(url)
-	if err != nil {
-		log.Panic(err)
-	}
-	defer response.Body.Close()
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Panic(err)
-	}
-	var obj XkcdStruct
-	json.Unmarshal(body, &obj)
-	picurl = obj.Img
-	alt = obj.Alt
-	return
-}
-
-
-// ----------------------------------------------------------------------------------
 //  application entry
 // ----------------------------------------------------------------------------------
 
 func main() {
 	// print the version number
-	log.Println("xkcdbot", VERSION, "#"+GIT_COMMIT, "started")
+	log.Println("xkcdbot", VERSION, "#" + GIT_COMMIT, "started")
 
 	// authenticate with the telegram bot api
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
@@ -142,44 +68,74 @@ func main() {
 		} else if update.InlineQuery != nil {
 			log.Printf("[%s] inline query: %s", update.InlineQuery.From.UserName, update.InlineQuery.Query)
 			if update.InlineQuery.Query == "random" {
-				var results []interface{}
+				// fetch the latest comic, in order
+				// to get the interval for randomizing
+				latest, err := xkcd.GetComic(xkcd.CURRENT_COMIC)
+				if err != nil {
+					log.Println("failed to fetch latest comic:", err.Error())
+					continue
+				}
 
 				// add the configured amount of results to the answer
+				var results []interface{}
 				for i := 0; i < RANDOM_INLINE_NUM; i++ {
-					Num := RandomizeMe(getCurrent())
-					pUrl, pAlt := getXkcd(Num)
-					pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID + strconv.Itoa(i), pUrl, pUrl)
-					pic.Caption = pAlt
+					// TODO: comic 404 is not defined, handle that...
+					num := RandomizeMe(latest.Num)
+					comic, err := xkcd.GetComic(num)
+					if err != nil {
+						log.Printf("failed to fetch comic %d: %s", num, err.Error())
+						continue
+					}
+
+					// add the new result
+					resultId := update.InlineQuery.ID + strconv.Itoa(i)
+					pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(resultId, comic.Img, comic.Img)
+					pic.Caption = comic.Alt
 					results = append(results, pic)	
 				}
 				
-				// build the answer
+				// build the answer and send to client
 				answer := tgbotapi.InlineConfig{
 					InlineQueryID: update.InlineQuery.ID,
 					Results:       results,
 					CacheTime:     0,
 				}
-				_, err := bot.AnswerInlineQuery(answer)
+				_, err = bot.AnswerInlineQuery(answer)
 				if err != nil {
 					log.Println("failed to answer inline query:", err.Error())
 				}
 			} else {
 				// Get latest xkcd
-				Num := getCurrent()
-				pUrl, pAlt := getXkcd(Num)
-				pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID, pUrl, pUrl)
-				pic.Caption = pAlt
+				comic, err := xkcd.GetComic(xkcd.CURRENT_COMIC)
+				if err != nil {
+					log.Println("failed to fetch current comic:", err.Error())
+					continue
+				}
 
+				// build the only inline result
+				pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(update.InlineQuery.ID, comic.Img, comic.Img)
+				pic.Caption = comic.Alt
+
+				// send the answer with results to the client
 				answer := tgbotapi.InlineConfig{
 					InlineQueryID: pic.ID,
 					Results:       []interface{}{pic},
 					CacheTime:     3,
 				}
-				_, err := bot.AnswerInlineQuery(answer)
+				_, err = bot.AnswerInlineQuery(answer)
 				if err != nil {
 					log.Println("failed to answer inline query:", err.Error())
 				}
 			}
 		}
 	}
+}
+
+
+// ----------------------------------------------------------------------------------
+//  helper functions
+// ----------------------------------------------------------------------------------
+
+func RandomizeMe(max int) int {
+	return rand.Intn(max - 1) + 1
 }
