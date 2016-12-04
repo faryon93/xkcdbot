@@ -53,7 +53,7 @@ func main() {
 	// authenticate with the telegram bot api
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
 	if err != nil {
-		log.Panic(err)
+		log.Panic("failed to create telegram bot:", err.Error())
 	}
 	log.Printf("authorized with telegram bot @%s", bot.Self.UserName)
 
