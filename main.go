@@ -5,10 +5,14 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
+	"flag"
 
 	"github.com/faryon93/xkcdbot/xkcd"
 
 	"gopkg.in/telegram-bot-api.v4"
+	"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve/search/query"
 )
 
 // ----------------------------------------------------------------------------------
@@ -29,7 +33,8 @@ const (
 // ----------------------------------------------------------------------------------
 
 var (
-	telegramToken  = os.Getenv("TELEGRAM_TOKEN")
+	telegramToken = os.Getenv("TELEGRAM_TOKEN")
+	indexPath = ""
 )
 
 
@@ -38,6 +43,10 @@ var (
 // ----------------------------------------------------------------------------------
 
 func main() {
+	// parse command line arguments
+	flag.StringVar(&indexPath, "index", "/var/lib/xkcdbot", "")
+	flag.Parse()
+
 	// print the version number
 	log.Println("xkcdbot", VERSION, "#" + GIT_COMMIT, "started")
 
@@ -53,6 +62,14 @@ func main() {
 	u.Timeout = TELEGRAM_UPDATE_TIMEOUT
 	updates, err := bot.GetUpdatesChan(u)
 
+	// open the xkcd bleve index
+	comicIndex, err := bleve.Open(indexPath)
+	if err != nil {
+		log.Println("failed to open comic index", indexPath + ":", err.Error())
+		log.Println("disabling 'search comic' feature")
+		comicIndex = nil
+	}
+
 	// process all updates received by the bot
 	for update := range updates {
 		// we received a private message
@@ -67,6 +84,8 @@ func main() {
 			// we received a inline query
 		} else if update.InlineQuery != nil {
 			log.Printf("[%s] inline query: %s", update.InlineQuery.From.UserName, update.InlineQuery.Query)
+
+			// user requested random comics
 			if update.InlineQuery.Query == "random" {
 				// fetch the latest comic, in order
 				// to get the interval for randomizing
@@ -104,7 +123,11 @@ func main() {
 				if err != nil {
 					log.Println("failed to answer inline query:", err.Error())
 				}
-			} else {
+
+			// user requested the latest comic
+			} else if update.InlineQuery.Query == "latest" || 
+					  update.InlineQuery.Query == "" ||
+					  comicIndex == nil {
 				// Get latest xkcd
 				comic, err := xkcd.GetComic(xkcd.CURRENT_COMIC)
 				if err != nil {
@@ -120,12 +143,61 @@ func main() {
 				answer := tgbotapi.InlineConfig{
 					InlineQueryID: pic.ID,
 					Results:       []interface{}{pic},
-					CacheTime:     3,
+					CacheTime:     0,
 				}
 				_, err = bot.AnswerInlineQuery(answer)
 				if err != nil {
 					log.Println("failed to answer inline query:", err.Error())
+					continue
 				}
+
+			// user entered a search keyword
+			} else {
+				// TODO: regex split, more than one whitespace, tabs....
+				rawTerms := strings.Split(update.InlineQuery.Query, " ")
+
+				// build query objects
+				terms := make([]query.Query, len(rawTerms))
+				for i, term := range rawTerms {
+					terms[i] = query.NewTermQuery(term)
+				}
+
+				// build the question and search the index
+				q := bleve.NewConjunctionQuery(terms...)
+				req := bleve.NewSearchRequest(q)
+				req.Fields = []string{"title", "safe_title", "transcript", "alt", "img"}
+				res, err := comicIndex.Search(req)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+
+				// append all found comics to the answer
+				var results []interface{}
+				for i, hit := range res.Hits {
+					// metadata
+					img := hit.Fields["img"].(string)
+					alt := hit.Fields["alt"].(string)
+
+					// build the only inline result
+					resultId := update.InlineQuery.ID + strconv.Itoa(i)
+					pic := tgbotapi.NewInlineQueryResultPhotoWithThumb(resultId, img, img)
+					pic.Caption = alt
+					results = append(results, pic)
+				}
+
+				// build the answer and send to client
+				answer := tgbotapi.InlineConfig{
+					InlineQueryID: update.InlineQuery.ID,
+					Results:       results,
+					CacheTime:     0,
+				}
+				_, err = bot.AnswerInlineQuery(answer)
+				if err != nil {
+					log.Println("failed to answer inline query:", err.Error())
+					continue
+				}
+
 			}
 		}
 	}
